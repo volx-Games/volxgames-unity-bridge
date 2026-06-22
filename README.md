@@ -16,28 +16,7 @@ Add the package to a Unity project's `Packages/manifest.json`:
 }
 ```
 
-For local package development in a project, temporarily switch that dependency to a local path:
-
-```json
-{
-  "dependencies": {
-    "com.volxgames.unity.bridge": "file:/absolute/path/to/volxgames-unity-bridge"
-  }
-}
-```
-
-When a project-specific experiment proves useful, move it back into this repo, release a new tag, and switch consuming projects back to the Git URL.
-
-## Repo layout
-
-- `Editor/`
-  Unity editor bridge package code
-- `Tools/unity-mcp-server/`
-  Node MCP adapter for Codex, Cursor, and other MCP clients
-- `.codex/config.toml.example`
-  Example Codex project configuration
-- `CHANGELOG.md`
-  Release notes for tagged package versions
+When a new release is published, update the tag in `Packages/manifest.json` and let Unity resolve the package again.
 
 ## Menu
 
@@ -192,35 +171,6 @@ When a project-specific experiment proves useful, move it back into this repo, r
 - `undo`
 - `redo`
 
-## Custom commands
-
-Project-specific editor scripts can register extra commands without editing the package:
-
-```csharp
-using VolxGames.UnityBridge.Editor;
-using UnityEditor;
-
-[InitializeOnLoad]
-public static class ProjectBridgeCommands
-{
-    static ProjectBridgeCommands()
-    {
-        UnityBridgeCommandRegistry.Register(
-            "project_validate_prefabs",
-            _ =>
-            {
-                AssetDatabase.Refresh();
-                return new UnityBridgeCustomCommandResult
-                {
-                    ok = true,
-                    message = "Prefab validation placeholder finished."
-                };
-            },
-            "Run a project-specific prefab validation command.");
-    }
-}
-```
-
 ## Safety
 
 Risky mutation commands require:
@@ -230,11 +180,3 @@ confirm = "I understand this will modify the Unity project."
 ```
 
 This is enforced for destructive or high-impact actions such as deleting or moving assets, removing packages, deleting PlayerPrefs, removing components, deleting hierarchy objects, replacing build scenes, or switching the build target.
-
-## Release workflow
-
-1. Update package code and docs in this repo.
-2. Bump `package.json` version.
-3. Append release notes in `CHANGELOG.md`.
-4. Commit and tag the release, for example `v0.1.1`.
-5. In consuming Unity projects, update the Git dependency tag in `Packages/manifest.json`.
