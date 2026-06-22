@@ -5,7 +5,7 @@ namespace VolxGames.UnityBridge.Editor
 {
     internal sealed class UnityBridgeWindow : EditorWindow
     {
-        [MenuItem("Tools/Unity Bridge/Settings Window")]
+        [MenuItem("Tools/Unity Bridge/Settings")]
         public static void ShowWindow()
         {
             GetWindow<UnityBridgeWindow>("Unity Bridge");

@@ -2,6 +2,11 @@
 
 All notable changes to `com.volxgames.unity.bridge` should be documented in this file.
 
+## [0.1.1] - 2026-06-22
+
+- Simplified the Unity menu to a single `Tools/Unity Bridge/Settings` entry.
+- Added missing Unity `.meta` files for package assets and tooling files.
+
 ## [0.1.0] - 2026-06-22
 
 - Initial standalone package release.

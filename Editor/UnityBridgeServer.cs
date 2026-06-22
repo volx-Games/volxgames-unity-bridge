@@ -168,12 +168,6 @@ namespace VolxGames.UnityBridge.Editor
             }
         }
 
-        [MenuItem("Tools/Unity Bridge/Open Settings")]
-        public static void OpenWindow()
-        {
-            UnityBridgeWindow.ShowWindow();
-        }
-
         private static void ListenLoop()
         {
             while (listener != null)

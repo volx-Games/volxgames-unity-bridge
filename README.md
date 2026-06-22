@@ -11,7 +11,7 @@ Add the package to a Unity project's `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.volxgames.unity.bridge": "https://github.com/volx-Games/volxgames-unity-bridge.git#v0.1.0"
+    "com.volxgames.unity.bridge": "https://github.com/volx-Games/volxgames-unity-bridge.git#v0.1.1"
   }
 }
 ```
@@ -43,7 +43,7 @@ When a project-specific experiment proves useful, move it back into this repo, r
 
 - `Tools/Unity Bridge/Start`
 - `Tools/Unity Bridge/Stop`
-- `Tools/Unity Bridge/Settings Window`
+- `Tools/Unity Bridge/Settings`
 
 ## HTTP endpoints
 
