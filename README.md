@@ -2,6 +2,8 @@
 
 This package runs a localhost Unity Editor bridge that exposes project state, runtime state, logs, and safe mutation commands to an external MCP adapter.
 
+Licensed under MIT. See `LICENSE.md`.
+
 ## Install
 
 Add the package to a Unity project's `Packages/manifest.json`:
