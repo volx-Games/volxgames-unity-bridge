@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "unity-bridge": {
+      "command": "node",
+      "args": [
+        "${workspaceFolder}/Tools/unity-mcp-server/server.js"
+      ],
+      "env": {
+        "UNITY_BRIDGE_URL": "http://127.0.0.1:48761"
+      }
+    }
+  }
+}

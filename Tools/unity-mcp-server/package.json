@@ -1,0 +1,13 @@
+{
+  "name": "unity-mcp-server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minimal MCP server that exposes tools for a local Unity editor bridge.",
+  "type": "commonjs",
+  "bin": {
+    "unity-mcp-server": "./server.js"
+  },
+  "scripts": {
+    "start": "node ./server.js"
+  }
+}
