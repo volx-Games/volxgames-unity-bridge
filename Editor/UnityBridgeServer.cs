@@ -389,6 +389,18 @@ namespace VolxGames.UnityBridge.Editor
                     WriteJson(context.Response, 200, UnityBridgeJson.SerializeObject(ExecuteOnMainThread(() =>
                         UnityBridgeStateBuilder.BuildEditorWindows())));
                     return;
+                case "/inspector/selection" when request.HttpMethod == "GET":
+                    WriteJson(context.Response, 200, UnityBridgeJson.SerializeObject(ExecuteOnMainThread(() =>
+                        UnityBridgeStateBuilder.BuildInspectorSelection())));
+                    return;
+                case "/console/selection" when request.HttpMethod == "GET":
+                    WriteJson(context.Response, 200, UnityBridgeJson.SerializeObject(ExecuteOnMainThread(() =>
+                        UnityBridgeStateBuilder.BuildConsoleSelection())));
+                    return;
+                case "/context/current" when request.HttpMethod == "GET":
+                    WriteJson(context.Response, 200, UnityBridgeJson.SerializeObject(ExecuteOnMainThread(() =>
+                        UnityBridgeStateBuilder.BuildCurrentContext(lastReloadAtUtc))));
+                    return;
                 case "/packages" when request.HttpMethod == "GET":
                     WriteJson(context.Response, 200, UnityBridgeJson.SerializeObject(ExecuteOnMainThread(() =>
                         UnityBridgeStateBuilder.BuildPackages())));

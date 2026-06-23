@@ -628,6 +628,21 @@ async function handleMessage(line) {
           properties: {},
           additionalProperties: false,
         }),
+        tool("unity_inspector_selection", "Read the current Inspector window state, active object, and selected property path.", {
+          type: "object",
+          properties: {},
+          additionalProperties: false,
+        }),
+        tool("unity_console_selection", "Read the current Console window state and selected log entry.", {
+          type: "object",
+          properties: {},
+          additionalProperties: false,
+        }),
+        tool("unity_current_context", "Read the current Unity editor context, including state, focused window, inspector, console, and active object.", {
+          type: "object",
+          properties: {},
+          additionalProperties: false,
+        }),
         tool("unity_packages", "List registered Unity packages for the project.", {
           type: "object",
           properties: {},
@@ -1847,6 +1862,12 @@ async function callTool(toolName, args) {
       return requestJson("/compilation/last");
     case "unity_editor_windows":
       return requestJson("/editor/windows");
+    case "unity_inspector_selection":
+      return requestJson("/inspector/selection");
+    case "unity_console_selection":
+      return requestJson("/console/selection");
+    case "unity_current_context":
+      return requestJson("/context/current");
     case "unity_packages":
       return requestJson("/packages");
     case "unity_package_operations":

@@ -47,6 +47,9 @@ This is enforced for destructive or high-impact actions such as deleting or movi
 - `unity_compilation`
 - `unity_last_compilation`
 - `unity_editor_windows`
+- `unity_inspector_selection`
+- `unity_console_selection`
+- `unity_current_context`
 - `unity_packages`
 - `unity_package_operations`
 - `unity_last_package_operation`
@@ -205,7 +208,7 @@ cwd = "/absolute/path/to/volxgames-unity-bridge"
 UNITY_BRIDGE_URL = "http://127.0.0.1:48761"
 ```
 
-An example file is checked in at `.codex/config.toml.example`.
+An example file is checked in at `examples/codex/config.toml.example`.
 
 ## Direct streaming endpoints
 

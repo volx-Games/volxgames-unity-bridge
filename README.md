@@ -18,6 +18,12 @@ Add the package to a Unity project's `Packages/manifest.json`:
 
 When a new release is published, update the tag in `Packages/manifest.json` and let Unity resolve the package again.
 
+## Compatibility
+
+- Targets Unity 6 (`6000.0+`)
+- Tested on `6000.3.8f1`
+- Older Unity versions are not officially supported yet
+
 ## Menu
 
 - `Tools/Unity Bridge/Start`

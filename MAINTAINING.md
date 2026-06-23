@@ -20,7 +20,7 @@ When the change is ready, switch consuming projects back to a Git tag release.
   Unity editor bridge package code
 - `Tools/unity-mcp-server/`
   Node MCP adapter for Codex, Cursor, and other MCP clients
-- `.codex/config.toml.example`
+- `examples/codex/config.toml.example`
   Example Codex project configuration
 - `CHANGELOG.md`
   Release notes for tagged package versions

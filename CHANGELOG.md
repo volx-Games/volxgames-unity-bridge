@@ -6,6 +6,8 @@ All notable changes to `com.volxgames.unity.bridge` should be documented in this
 
 - Return explicit `busy` responses for main-thread timeouts during compilation, refresh, and reload-heavy editor states.
 - Include current compilation summary in timed-out command responses to make fallback handling clearer for MCP clients.
+- Add `unity_inspector_selection`, `unity_console_selection`, and `unity_current_context` tools for richer live editor context reads.
+- Move client config examples under `examples/` and document Unity version compatibility more clearly for package users.
 
 ## [0.1.1] - 2026-06-22
 

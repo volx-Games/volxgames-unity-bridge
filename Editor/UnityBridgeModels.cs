@@ -773,6 +773,46 @@ namespace VolxGames.UnityBridge.Editor
     }
 
     [Serializable]
+    internal sealed class UnityBridgeInspectorSelectionSummary
+    {
+        public bool hasInspectorWindow;
+        public string windowTitle;
+        public string windowType;
+        public bool focused;
+        public bool hasFocus;
+        public bool isLocked;
+        public string selectedPropertyPath;
+        public int selectionCount;
+        public List<UnityBridgeObjectRef> selection = new List<UnityBridgeObjectRef>();
+        public UnityBridgeObjectDetails activeObject;
+        public string message;
+    }
+
+    [Serializable]
+    internal sealed class UnityBridgeConsoleSelectionSummary
+    {
+        public bool hasConsoleWindow;
+        public string windowTitle;
+        public string windowType;
+        public bool focused;
+        public bool hasFocus;
+        public int selectedEntryIndex = -1;
+        public UnityBridgeLogEntry selectedEntry;
+        public string message;
+    }
+
+    [Serializable]
+    internal sealed class UnityBridgeCurrentContextSummary
+    {
+        public UnityBridgeState state;
+        public UnityBridgeEditorWindowInfo focusedWindow;
+        public UnityBridgeInspectorSelectionSummary inspector;
+        public UnityBridgeConsoleSelectionSummary console;
+        public UnityBridgeObjectDetails activeObject;
+        public UnityBridgePrefabStageInfo prefabStage;
+    }
+
+    [Serializable]
     internal sealed class UnityBridgePackageInfo
     {
         public string name;

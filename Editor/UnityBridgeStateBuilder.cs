@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Globalization;
+using System.Reflection;
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditorInternal;
@@ -541,6 +542,11 @@ namespace VolxGames.UnityBridge.Editor
             return null;
         }
 
+        public static UnityBridgeEditorWindowInfo BuildFocusedEditorWindow()
+        {
+            return ToEditorWindowInfo(EditorWindow.focusedWindow);
+        }
+
         public static List<UnityBridgePackageInfo> BuildPackages()
         {
             var packages = new List<UnityBridgePackageInfo>();
@@ -571,6 +577,80 @@ namespace VolxGames.UnityBridge.Editor
             }
 
             return selection;
+        }
+
+        public static UnityBridgeInspectorSelectionSummary BuildInspectorSelection()
+        {
+            var window = FindEditorWindow("UnityEditor.InspectorWindow", "Inspector");
+            var summary = new UnityBridgeInspectorSelectionSummary
+            {
+                hasInspectorWindow = window != null,
+                selectionCount = Selection.objects.Length,
+                activeObject = BuildActiveObjectDetails()
+            };
+
+            foreach (var selectedObject in Selection.objects)
+            {
+                summary.selection.Add(ToObjectRef(selectedObject));
+            }
+
+            if (window == null)
+            {
+                summary.message = "Inspector window is not currently loaded.";
+                return summary;
+            }
+
+            summary.windowTitle = window.titleContent != null ? window.titleContent.text : string.Empty;
+            summary.windowType = window.GetType().FullName;
+            summary.focused = EditorWindow.focusedWindow == window;
+            summary.hasFocus = window.hasFocus;
+            summary.isLocked = ReadBoolMember(window, "isLocked");
+            summary.selectedPropertyPath = ReadStringMember(window, "selectedPropertyPath");
+            summary.message = "Read inspector selection state.";
+            return summary;
+        }
+
+        public static UnityBridgeConsoleSelectionSummary BuildConsoleSelection()
+        {
+            var window = FindEditorWindow("UnityEditor.ConsoleWindow", "Console");
+            var summary = new UnityBridgeConsoleSelectionSummary
+            {
+                hasConsoleWindow = window != null
+            };
+
+            if (window == null)
+            {
+                summary.message = "Console window is not currently loaded.";
+                return summary;
+            }
+
+            summary.windowTitle = window.titleContent != null ? window.titleContent.text : string.Empty;
+            summary.windowType = window.GetType().FullName;
+            summary.focused = EditorWindow.focusedWindow == window;
+            summary.hasFocus = window.hasFocus;
+            summary.selectedEntryIndex = ReadIntMember(window, "selectedRow", ReadIntMember(window, "selectedEntry", -1));
+            if (summary.selectedEntryIndex >= 0)
+            {
+                summary.selectedEntry = BuildConsoleEntry(summary.selectedEntryIndex);
+            }
+
+            summary.message = summary.selectedEntry != null
+                ? "Read selected console entry."
+                : "Console window is loaded, but no selected entry could be resolved.";
+            return summary;
+        }
+
+        public static UnityBridgeCurrentContextSummary BuildCurrentContext(string lastReloadAtUtc)
+        {
+            return new UnityBridgeCurrentContextSummary
+            {
+                state = BuildState(lastReloadAtUtc),
+                focusedWindow = BuildFocusedEditorWindow(),
+                inspector = BuildInspectorSelection(),
+                console = BuildConsoleSelection(),
+                activeObject = BuildActiveObjectDetails(),
+                prefabStage = BuildPrefabStageInfo()
+            };
         }
 
         public static List<UnityBridgeHierarchyScene> BuildHierarchy()
@@ -1378,6 +1458,157 @@ namespace VolxGames.UnityBridge.Editor
                 default:
                     return property.hasVisibleChildren ? "<complex>" : string.Empty;
             }
+        }
+
+        private static UnityBridgeEditorWindowInfo ToEditorWindowInfo(EditorWindow window)
+        {
+            if (window == null)
+            {
+                return null;
+            }
+
+            return new UnityBridgeEditorWindowInfo
+            {
+                title = window.titleContent != null ? window.titleContent.text : string.Empty,
+                type = window.GetType().FullName,
+                focused = EditorWindow.focusedWindow == window,
+                hasFocus = window.hasFocus
+            };
+        }
+
+        private static UnityBridgeLogEntry BuildConsoleEntry(int entryIndex)
+        {
+            try
+            {
+                var logEntriesType = typeof(EditorWindow).Assembly.GetType("UnityEditor.LogEntries");
+                var logEntryType = typeof(EditorWindow).Assembly.GetType("UnityEditor.LogEntry")
+                    ?? typeof(EditorWindow).Assembly.GetType("UnityEditor.LogEntryStruct");
+                if (logEntriesType == null || logEntryType == null)
+                {
+                    return null;
+                }
+
+                var entryInstance = System.Activator.CreateInstance(logEntryType);
+                var getEntryMethod = logEntriesType.GetMethod(
+                    "GetEntryInternal",
+                    BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic,
+                    null,
+                    new[] { typeof(int), logEntryType },
+                    null);
+                if (getEntryMethod == null)
+                {
+                    return null;
+                }
+
+                var resolved = getEntryMethod.Invoke(null, new[] { (object)entryIndex, entryInstance });
+                if (resolved is bool ok && !ok)
+                {
+                    return null;
+                }
+
+                var message = ReadStringMember(entryInstance, "condition", "message");
+                var stackTrace = ReadStringMember(entryInstance, "stackTrace");
+                var mode = ReadIntMember(entryInstance, "mode", ReadIntMember(entryInstance, "flags", 0));
+
+                return new UnityBridgeLogEntry
+                {
+                    level = InferConsoleLogLevel(mode, message, stackTrace),
+                    message = message,
+                    stackTrace = stackTrace,
+                    timestampUtc = string.Empty
+                };
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string InferConsoleLogLevel(int mode, string message, string stackTrace)
+        {
+            if ((mode & 1) != 0)
+            {
+                return "error";
+            }
+
+            if ((mode & 2) != 0)
+            {
+                return "warning";
+            }
+
+            var combined = (message ?? string.Empty) + "\n" + (stackTrace ?? string.Empty);
+            if (combined.IndexOf("error", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "error";
+            }
+
+            if (combined.IndexOf("warning", System.StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return "warning";
+            }
+
+            return "log";
+        }
+
+        private static string ReadStringMember(object target, params string[] names)
+        {
+            var value = ReadMemberValue(target, names);
+            return value != null ? value.ToString() : string.Empty;
+        }
+
+        private static int ReadIntMember(object target, string name, int fallbackValue)
+        {
+            var value = ReadMemberValue(target, name);
+            if (value is int intValue)
+            {
+                return intValue;
+            }
+
+            return value is System.IConvertible convertible
+                ? convertible.ToInt32(CultureInfo.InvariantCulture)
+                : fallbackValue;
+        }
+
+        private static bool ReadBoolMember(object target, string name)
+        {
+            var value = ReadMemberValue(target, name);
+            if (value is bool boolValue)
+            {
+                return boolValue;
+            }
+
+            return value is System.IConvertible convertible && convertible.ToInt32(CultureInfo.InvariantCulture) != 0;
+        }
+
+        private static object ReadMemberValue(object target, params string[] names)
+        {
+            if (target == null || names == null)
+            {
+                return null;
+            }
+
+            var targetType = target.GetType();
+            foreach (var name in names)
+            {
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    continue;
+                }
+
+                var property = targetType.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (property != null)
+                {
+                    return property.GetValue(target, null);
+                }
+
+                var field = targetType.GetField(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (field != null)
+                {
+                    return field.GetValue(target);
+                }
+            }
+
+            return null;
         }
     }
 }
