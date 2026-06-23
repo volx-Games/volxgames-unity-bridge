@@ -1,6 +1,6 @@
 {
   "name": "com.volxgames.unity.bridge",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "displayName": "Unity Editor MCP Bridge",
   "description": "Editor-only localhost bridge that exposes Unity state and safe commands to an external MCP server.",
   "unity": "6000.0",

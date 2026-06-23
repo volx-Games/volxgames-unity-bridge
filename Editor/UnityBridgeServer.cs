@@ -204,6 +204,18 @@ namespace VolxGames.UnityBridge.Editor
             {
                 HandleContext(context);
             }
+            catch (TimeoutException)
+            {
+                try
+                {
+                    WriteJson(context.Response, 503, UnityBridgeJson.SerializeObject(BuildBusyResponse(
+                        "Unity Editor is busy and did not respond on the main thread in time. Retry after compilation, refresh, or reload finishes.")));
+                }
+                catch
+                {
+                    SafeClose(context.Response);
+                }
+            }
             catch (Exception exception)
             {
                 Debug.LogError($"[UnityBridge] Request handling error: {exception}");
@@ -519,8 +531,12 @@ namespace VolxGames.UnityBridge.Editor
                 : new UnityBridgeCommandResponse
             {
                 ok = false,
-                message = "Command timed out before Unity main thread handled it.",
-                state = UnityBridgeStateBuilder.BuildState(lastReloadAtUtc)
+                busy = IsEditorBusy(),
+                message = IsEditorBusy()
+                    ? "Unity Editor is busy and did not handle the command on the main thread in time. Retry after compilation, refresh, or reload finishes."
+                    : "Command timed out before Unity main thread handled it.",
+                state = UnityBridgeStateBuilder.BuildState(lastReloadAtUtc),
+                compilation = UnityBridgeCompilationTracker.GetCurrentOrLastReport()
             };
         }
 
@@ -545,6 +561,23 @@ namespace VolxGames.UnityBridge.Editor
             }
 
             return (T)job.Result;
+        }
+
+        private static bool IsEditorBusy()
+        {
+            return EditorApplication.isCompiling || EditorApplication.isUpdating;
+        }
+
+        private static UnityBridgeBusyResponse BuildBusyResponse(string message)
+        {
+            return new UnityBridgeBusyResponse
+            {
+                ok = false,
+                busy = IsEditorBusy(),
+                message = message,
+                state = UnityBridgeStateBuilder.BuildState(lastReloadAtUtc),
+                compilation = UnityBridgeCompilationTracker.GetCurrentOrLastReport()
+            };
         }
 
         private static string ReadBody(HttpListenerRequest request)

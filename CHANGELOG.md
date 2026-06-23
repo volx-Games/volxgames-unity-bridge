@@ -2,6 +2,11 @@
 
 All notable changes to `com.volxgames.unity.bridge` should be documented in this file.
 
+## [0.1.2] - 2026-06-23
+
+- Return explicit `busy` responses for main-thread timeouts during compilation, refresh, and reload-heavy editor states.
+- Include current compilation summary in timed-out command responses to make fallback handling clearer for MCP clients.
+
 ## [0.1.1] - 2026-06-22
 
 - Simplified the Unity menu to a single `Tools/Unity Bridge/Settings` entry.

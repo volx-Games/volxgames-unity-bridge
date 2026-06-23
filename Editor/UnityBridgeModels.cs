@@ -1012,8 +1012,20 @@ namespace VolxGames.UnityBridge.Editor
     internal sealed class UnityBridgeCommandResponse
     {
         public bool ok;
+        public bool busy;
         public string message;
         public UnityBridgeState state;
+        public UnityBridgeCompilationSummary compilation;
+    }
+
+    [Serializable]
+    internal sealed class UnityBridgeBusyResponse
+    {
+        public bool ok;
+        public bool busy;
+        public string message;
+        public UnityBridgeState state;
+        public UnityBridgeCompilationSummary compilation;
     }
 
     [Serializable]
