@@ -2,6 +2,8 @@
 
 This package runs a localhost Unity Editor bridge that exposes project state, runtime state, logs, and safe mutation commands to an external MCP adapter.
 
+The current release exposes 123 MCP tools through the bundled stdio adapter.
+
 Licensed under MIT. See `LICENSE.md`.
 
 ## Install
@@ -11,7 +13,7 @@ Add the package to a Unity project's `Packages/manifest.json`:
 ```json
 {
   "dependencies": {
-    "com.volxgames.unity.bridge": "https://github.com/volx-Games/volxgames-unity-bridge.git#v0.1.1"
+    "com.volxgames.unity.bridge": "https://github.com/volx-Games/volxgames-unity-bridge.git#v0.1.2"
   }
 }
 ```

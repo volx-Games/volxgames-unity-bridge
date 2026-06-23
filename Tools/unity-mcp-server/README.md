@@ -1,6 +1,6 @@
 # Unity MCP Server
 
-This server exposes MCP tools backed by the reusable Unity editor bridge in the repo root package `com.volxgames.unity.bridge`.
+This server exposes 123 MCP tools backed by the reusable Unity editor bridge in the repo root package `com.volxgames.unity.bridge`.
 
 It is not Codex-specific. Any MCP client that can launch a stdio server can use this adapter, including Cursor.
 
