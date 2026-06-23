@@ -5,7 +5,7 @@ const { stdin, stdout, stderr, env } = process;
 const bridgeBaseUrl = env.UNITY_BRIDGE_URL || "http://127.0.0.1:48761";
 const serverInfo = {
   name: "unity-mcp-server",
-  version: "0.1.0",
+  version: "0.1.2",
 };
 const BridgeReadRetryCount = 6;
 const BridgeReadRetryBaseDelayMs = 400;
