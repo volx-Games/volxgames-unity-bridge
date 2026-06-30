@@ -9,7 +9,9 @@ namespace VolxGames.UnityBridge.Editor
         public bool ok = true;
         public string projectName;
         public string projectPath;
+        public string url;
         public int port;
+        public int processId;
         public bool running;
         public string unityVersion;
         public string startedAtUtc;
@@ -627,6 +629,7 @@ namespace VolxGames.UnityBridge.Editor
         public int selectionCount;
         public List<UnityBridgeObjectRef> selection = new List<UnityBridgeObjectRef>();
         public List<UnityBridgeSceneRef> openScenes = new List<UnityBridgeSceneRef>();
+        public string lastAssetRefreshAtUtc;
         public string lastReloadAtUtc;
     }
 

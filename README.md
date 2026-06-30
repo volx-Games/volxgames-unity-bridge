@@ -32,6 +32,24 @@ When a new release is published, update the tag in `Packages/manifest.json` and 
 - `Tools/Unity Bridge/Stop`
 - `Tools/Unity Bridge/Settings`
 
+## Multiple Unity Editors
+
+The bridge prefers port `48761`, but falls back to the next available localhost
+port when another Unity Editor is already using it. Each running editor writes a
+local discovery record under the user's application data folder, so MCP adapters
+can target a Unity project by path instead of sharing one fixed port.
+
+For multiple open Unity projects, configure the MCP adapter with:
+
+```bash
+UNITY_BRIDGE_PROJECT_PATH=/absolute/path/to/UnityProject
+```
+
+`UNITY_BRIDGE_URL` is still supported for explicit manual targeting. If neither
+value is set, the adapter auto-discovers only when exactly one live Unity Bridge
+instance is running; with multiple live instances it fails closed and asks for a
+project path or URL.
+
 ## HTTP endpoints
 
 - `GET /health`

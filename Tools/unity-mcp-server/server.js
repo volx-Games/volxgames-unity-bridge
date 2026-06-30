@@ -1,14 +1,21 @@
 #!/usr/bin/env node
 
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+
 const { stdin, stdout, stderr, env } = process;
 
-const bridgeBaseUrl = env.UNITY_BRIDGE_URL || "http://127.0.0.1:48761";
+const explicitBridgeBaseUrl = env.UNITY_BRIDGE_URL ? normalizeBaseUrl(env.UNITY_BRIDGE_URL) : "";
+const bridgeProjectPath = env.UNITY_BRIDGE_PROJECT_PATH ? normalizePath(env.UNITY_BRIDGE_PROJECT_PATH) : "";
+let resolvedBridgeBaseUrl = "";
 const serverInfo = {
   name: "unity-mcp-server",
-  version: "0.1.2",
+  version: "0.1.3",
 };
 const BridgeReadRetryCount = 6;
 const BridgeReadRetryBaseDelayMs = 400;
+const BridgeDiscoveryProbeTimeoutMs = 750;
 const RISKY_CONFIRMATION_TEXT = "I understand this will modify the Unity project.";
 const riskyCommandNames = new Set([
   "switch_build_target",
@@ -2379,6 +2386,7 @@ async function requestJson(path, options = {}) {
 
   while (true) {
     try {
+      const bridgeBaseUrl = await resolveBridgeBaseUrl();
       const response = await fetch(`${bridgeBaseUrl}${path}`, options);
       const text = await response.text();
 
@@ -2394,9 +2402,16 @@ async function requestJson(path, options = {}) {
         throw new Error(message);
       }
 
+      if (path === "/health") {
+        validateUnityMcpHealth(data, bridgeBaseUrl);
+      }
+
       return data;
     } catch (error) {
       if (!shouldRetry || !isRetryableBridgeError(error) || attempt >= BridgeReadRetryCount) {
+        if (!explicitBridgeBaseUrl) {
+          resolvedBridgeBaseUrl = "";
+        }
         throw error;
       }
 
@@ -2404,6 +2419,180 @@ async function requestJson(path, options = {}) {
       attempt += 1;
     }
   }
+}
+
+async function resolveBridgeBaseUrl() {
+  if (explicitBridgeBaseUrl) {
+    return explicitBridgeBaseUrl;
+  }
+
+  if (resolvedBridgeBaseUrl) {
+    return resolvedBridgeBaseUrl;
+  }
+
+  const instances = await readLiveBridgeInstances();
+  let matches = instances;
+
+  if (bridgeProjectPath) {
+    matches = instances.filter((instance) => normalizePath(instance.projectPath || "") === bridgeProjectPath);
+    if (matches.length === 0) {
+      throw new Error(`No live Unity Bridge instance found for UNITY_BRIDGE_PROJECT_PATH=${bridgeProjectPath}.`);
+    }
+  }
+
+  if (matches.length === 0) {
+    throw new Error(
+      "No live Unity Bridge instance found. Start Unity Bridge in the target project, or set UNITY_BRIDGE_URL."
+    );
+  }
+
+  if (matches.length > 1) {
+    const details = matches
+      .map((instance) => `${instance.projectName || "Unity project"} at ${instance.projectPath || "unknown path"} (${instance.url})`)
+      .join("; ");
+    throw new Error(
+      `Multiple Unity Bridge instances are running. Set UNITY_BRIDGE_PROJECT_PATH or UNITY_BRIDGE_URL. Found: ${details}`
+    );
+  }
+
+  const selectedBridgeBaseUrl = normalizeBaseUrl(matches[0].url);
+  if (bridgeProjectPath) {
+    resolvedBridgeBaseUrl = selectedBridgeBaseUrl;
+  }
+
+  return selectedBridgeBaseUrl;
+}
+
+async function readLiveBridgeInstances() {
+  const registryDir = bridgeRegistryDirectory();
+  let entries;
+  try {
+    entries = fs.readdirSync(registryDir, { withFileTypes: true });
+  } catch (error) {
+    if (error && error.code === "ENOENT") {
+      return [];
+    }
+
+    throw error;
+  }
+
+  const instances = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith(".json")) {
+      continue;
+    }
+
+    const filePath = path.join(registryDir, entry.name);
+    let instance;
+    try {
+      instance = JSON.parse(fs.readFileSync(filePath, "utf8"));
+    } catch {
+      continue;
+    }
+
+    if (!instance || typeof instance.url !== "string" || !isLoopbackHttpUrl(instance.url)) {
+      continue;
+    }
+
+    const liveInstance = await readLiveBridgeHealth(instance.url);
+    if (liveInstance) {
+      instances.push({
+        ...instance,
+        ...liveInstance,
+        url: normalizeBaseUrl(instance.url),
+      });
+    }
+  }
+
+  return instances;
+}
+
+async function readLiveBridgeHealth(url) {
+  try {
+    const response = await fetchWithTimeout(`${normalizeBaseUrl(url)}/health`, BridgeDiscoveryProbeTimeoutMs);
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = await response.json();
+    validateUnityMcpHealth(data, normalizeBaseUrl(url));
+    if (!data || data.ok !== true || data.running !== true) {
+      return null;
+    }
+
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchWithTimeout(url, timeoutMs) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function bridgeRegistryDirectory() {
+  if (process.platform === "darwin") {
+    return path.join(os.homedir(), "Library", "Application Support", "VolxGames", "UnityBridge", "instances");
+  }
+
+  if (process.platform === "win32") {
+    return path.join(env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"), "VolxGames", "UnityBridge", "instances");
+  }
+
+  return path.join(env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config"), "VolxGames", "UnityBridge", "instances");
+}
+
+function normalizeBaseUrl(url) {
+  return String(url || "").replace(/\/+$/, "");
+}
+
+function normalizePath(value) {
+  if (!value) {
+    return "";
+  }
+
+  const normalized = path.resolve(String(value)).replace(/[\\/]+$/, "");
+  return process.platform === "darwin" || process.platform === "win32"
+    ? normalized.toLowerCase()
+    : normalized;
+}
+
+function isLoopbackHttpUrl(value) {
+  let parsed;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+  return (
+    (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+    (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]")
+  );
+}
+
+function validateUnityMcpHealth(data, bridgeBaseUrl) {
+  const service = data && typeof data.service === "string" ? data.service : "";
+  if (service === "fresnel-runtime") {
+    throw new Error(
+      `UNITY_BRIDGE_URL points to the Fresnel Python runtime (${bridgeBaseUrl}), not the Unity MCP bridge.`
+    );
+  }
+
+  if (service === "fresnel-unity-bridge") {
+    throw new Error(
+      `UNITY_BRIDGE_URL points to the Fresnel private bridge (${bridgeBaseUrl}), not the Unity MCP bridge.`
+    );
+  }
+
+  return data;
 }
 
 function tool(name, description, inputSchema) {

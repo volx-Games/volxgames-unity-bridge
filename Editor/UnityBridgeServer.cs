@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Sockets;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using UnityEditor;
@@ -19,9 +21,11 @@ namespace VolxGames.UnityBridge.Editor
         private const string PortPrefKey = "UnityBridge.Unity.Mcp.Port";
         private const string RestartAfterReloadSessionKey = "UnityBridge.Unity.Mcp.RestartAfterReload";
         private const int DefaultPort = 48761;
+        private const int PortFallbackCount = 100;
         private const string RiskyActionConfirmation = "I understand this will modify the Unity project.";
         private const int MaxAutoStartRetryCount = 10;
         private const double AutoStartRetryDelaySeconds = 0.75;
+        private const double RegistryHeartbeatIntervalSeconds = 10.0d;
 
         private static readonly object SyncRoot = new object();
 
@@ -44,14 +48,19 @@ namespace VolxGames.UnityBridge.Editor
         private static bool autoStartScheduled;
         private static int autoStartRetryCount;
         private static double nextAutoStartAttemptTime;
+        private static double nextRegistryHeartbeatTime;
+        private static string registryFilePath;
+        private static volatile bool cachedEditorBusy;
 
         static UnityBridgeServer()
         {
             AssemblyReloadEvents.beforeAssemblyReload += HandleBeforeAssemblyReload;
             AssemblyReloadEvents.afterAssemblyReload += MarkReload;
             EditorApplication.quitting += Stop;
+            EditorApplication.update += UpdateEditorBusyState;
             EditorApplication.update += DrainPendingCommands;
             EditorApplication.update += AutoStartTick;
+            EditorApplication.update += RegistryHeartbeatTick;
             CompilationPipeline.compilationStarted += _ =>
             {
                 UnityBridgeCompilationTracker.MarkCompilationStarted();
@@ -90,13 +99,16 @@ namespace VolxGames.UnityBridge.Editor
 
         public static bool IsRunning => listener != null && listener.IsListening;
 
+        public static int BoundPort => cachedPort;
+
         public static int Port
         {
             get => EditorPrefs.GetInt(PortPrefKey, DefaultPort);
             set
             {
-                EditorPrefs.SetInt(PortPrefKey, value);
-                cachedPort = value;
+                var normalizedPort = NormalizePort(value);
+                EditorPrefs.SetInt(PortPrefKey, normalizedPort);
+                cachedPort = normalizedPort;
             }
         }
 
@@ -120,11 +132,10 @@ namespace VolxGames.UnityBridge.Editor
 
                 try
                 {
-                    cachedPort = Port;
-                    listener = new HttpListener();
-                    listener.Prefixes.Add($"http://127.0.0.1:{cachedPort}/");
-                    listener.Start();
+                    var requestedPort = NormalizePort(Port);
+                    listener = StartListener(requestedPort, out cachedPort);
                     startedAtUtc = DateTime.UtcNow.ToString("O");
+                    RegisterBridgeInstance();
 
                     listenerThread = new Thread(ListenLoop)
                     {
@@ -134,6 +145,10 @@ namespace VolxGames.UnityBridge.Editor
                     listenerThread.Start();
 
                     Debug.Log($"[UnityBridge] Listening on http://127.0.0.1:{cachedPort}/");
+                    if (cachedPort != requestedPort)
+                    {
+                        Debug.LogWarning($"[UnityBridge] Preferred port {requestedPort} was unavailable. Using {cachedPort} instead.");
+                    }
                 }
                 catch (Exception exception)
                 {
@@ -163,9 +178,51 @@ namespace VolxGames.UnityBridge.Editor
                     // Ignore shutdown races during assembly reload.
                 }
 
+                RemoveBridgeInstance();
                 listener = null;
                 listenerThread = null;
             }
+        }
+
+        private static HttpListener StartListener(int preferredPort, out int boundPort)
+        {
+            Exception lastException = null;
+            var firstPort = NormalizePort(preferredPort);
+            var lastPort = Math.Min(65535, firstPort + PortFallbackCount - 1);
+
+            for (var port = firstPort; port <= lastPort; port++)
+            {
+                var candidate = new HttpListener();
+                try
+                {
+                    candidate.Prefixes.Add($"http://127.0.0.1:{port}/");
+                    candidate.Start();
+                    boundPort = port;
+                    return candidate;
+                }
+                catch (HttpListenerException exception)
+                {
+                    lastException = exception;
+                    candidate.Close();
+                }
+                catch (SocketException exception)
+                {
+                    lastException = exception;
+                    candidate.Close();
+                }
+                catch
+                {
+                    candidate.Close();
+                    throw;
+                }
+            }
+
+            throw new InvalidOperationException($"No available Unity Bridge port found in range {firstPort}-{lastPort}.", lastException);
+        }
+
+        private static int NormalizePort(int port)
+        {
+            return Math.Min(65535, Math.Max(1, port));
         }
 
         private static void ListenLoop()
@@ -538,17 +595,19 @@ namespace VolxGames.UnityBridge.Editor
                 ? TestMainThreadTimeout
                 : DefaultMainThreadTimeout;
 
-            return pendingCommand.Complete.WaitOne(timeout)
-                ? pendingCommand.Response
-                : new UnityBridgeCommandResponse
+            if (pendingCommand.Complete.WaitOne(timeout))
+            {
+                return pendingCommand.Response;
+            }
+
+            pendingCommand.Cancelled = true;
+            return new UnityBridgeCommandResponse
             {
                 ok = false,
                 busy = IsEditorBusy(),
                 message = IsEditorBusy()
                     ? "Unity Editor is busy and did not handle the command on the main thread in time. Retry after compilation, refresh, or reload finishes."
-                    : "Command timed out before Unity main thread handled it.",
-                state = UnityBridgeStateBuilder.BuildState(lastReloadAtUtc),
-                compilation = UnityBridgeCompilationTracker.GetCurrentOrLastReport()
+                    : "Command timed out before Unity main thread handled it."
             };
         }
 
@@ -564,6 +623,7 @@ namespace VolxGames.UnityBridge.Editor
 
             if (!job.Complete.WaitOne(timeout))
             {
+                job.Cancelled = true;
                 throw new TimeoutException("Main thread request timed out.");
             }
 
@@ -577,7 +637,7 @@ namespace VolxGames.UnityBridge.Editor
 
         private static bool IsEditorBusy()
         {
-            return EditorApplication.isCompiling || EditorApplication.isUpdating;
+            return cachedEditorBusy;
         }
 
         private static UnityBridgeBusyResponse BuildBusyResponse(string message)
@@ -586,9 +646,7 @@ namespace VolxGames.UnityBridge.Editor
             {
                 ok = false,
                 busy = IsEditorBusy(),
-                message = message,
-                state = UnityBridgeStateBuilder.BuildState(lastReloadAtUtc),
-                compilation = UnityBridgeCompilationTracker.GetCurrentOrLastReport()
+                message = message
             };
         }
 
@@ -720,13 +778,134 @@ namespace VolxGames.UnityBridge.Editor
             nextAutoStartAttemptTime = 0.0d;
         }
 
+        private static void UpdateEditorBusyState()
+        {
+            cachedEditorBusy = EditorApplication.isCompiling || EditorApplication.isUpdating;
+        }
+
+        private static void RegistryHeartbeatTick()
+        {
+            if (!IsRunning || EditorApplication.timeSinceStartup < nextRegistryHeartbeatTime)
+            {
+                return;
+            }
+
+            RegisterBridgeInstance();
+        }
+
+        private static void RegisterBridgeInstance()
+        {
+            try
+            {
+                var projectPath = ProjectRootPath();
+                registryFilePath = Path.Combine(RegistryDirectory(), HashPath(projectPath) + ".json");
+                Directory.CreateDirectory(Path.GetDirectoryName(registryFilePath));
+                var now = DateTime.UtcNow.ToString("O");
+                var json = "{" +
+                           $"\"projectName\":{Quote(Application.productName)}," +
+                           $"\"projectPath\":{Quote(projectPath)}," +
+                           $"\"url\":{Quote($"http://127.0.0.1:{cachedPort}")}," +
+                           $"\"port\":{cachedPort}," +
+                           $"\"processId\":{System.Diagnostics.Process.GetCurrentProcess().Id}," +
+                           $"\"unityVersion\":{Quote(Application.unityVersion)}," +
+                           $"\"startedAtUtc\":{Quote(startedAtUtc)}," +
+                           $"\"lastSeenUtc\":{Quote(now)}" +
+                           "}";
+                var temporaryPath = registryFilePath + ".tmp";
+                File.WriteAllText(temporaryPath, json);
+                if (File.Exists(registryFilePath))
+                {
+                    File.Replace(temporaryPath, registryFilePath, null);
+                }
+                else
+                {
+                    File.Move(temporaryPath, registryFilePath);
+                }
+                nextRegistryHeartbeatTime = EditorApplication.timeSinceStartup + RegistryHeartbeatIntervalSeconds;
+            }
+            catch (Exception exception)
+            {
+                Debug.LogWarning($"[UnityBridge] Failed to update bridge registry: {exception.Message}");
+                nextRegistryHeartbeatTime = EditorApplication.timeSinceStartup + RegistryHeartbeatIntervalSeconds;
+            }
+        }
+
+        private static void RemoveBridgeInstance()
+        {
+            if (string.IsNullOrEmpty(registryFilePath))
+            {
+                return;
+            }
+
+            try
+            {
+                if (File.Exists(registryFilePath))
+                {
+                    File.Delete(registryFilePath);
+                }
+            }
+            catch
+            {
+                // Best-effort cleanup; stale entries are ignored by MCP discovery.
+            }
+
+            registryFilePath = null;
+        }
+
+        private static string RegistryDirectory()
+        {
+            string applicationDataRoot;
+            switch (Application.platform)
+            {
+                case RuntimePlatform.OSXEditor:
+                    applicationDataRoot = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.Personal),
+                        "Library",
+                        "Application Support");
+                    break;
+                case RuntimePlatform.WindowsEditor:
+                    applicationDataRoot = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+                    break;
+                default:
+                    applicationDataRoot = Environment.GetEnvironmentVariable("XDG_CONFIG_HOME");
+                    if (string.IsNullOrEmpty(applicationDataRoot))
+                    {
+                        applicationDataRoot = Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.Personal),
+                            ".config");
+                    }
+                    break;
+            }
+
+            return Path.Combine(
+                applicationDataRoot,
+                "VolxGames",
+                "UnityBridge",
+                "instances");
+        }
+
+        private static string ProjectRootPath()
+        {
+            return Path.GetFullPath(Path.Combine(Application.dataPath, ".."));
+        }
+
+        private static string HashPath(string value)
+        {
+            using var sha256 = SHA256.Create();
+            var bytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(value.ToLowerInvariant()));
+            return BitConverter.ToString(bytes).Replace("-", string.Empty).ToLowerInvariant();
+        }
+
         private static void DrainPendingCommands()
         {
             while (PendingMainThreadJobs.TryDequeue(out var pendingJob))
             {
                 try
                 {
-                    pendingJob.Result = pendingJob.Callback();
+                    if (!pendingJob.Cancelled)
+                    {
+                        pendingJob.Result = pendingJob.Callback();
+                    }
                 }
                 catch (Exception exception)
                 {
@@ -742,7 +921,10 @@ namespace VolxGames.UnityBridge.Editor
             {
                 try
                 {
-                    pendingCommand.Response = UnityBridgeCommands.Execute(pendingCommand.Request, lastReloadAtUtc);
+                    if (!pendingCommand.Cancelled)
+                    {
+                        pendingCommand.Response = UnityBridgeCommands.Execute(pendingCommand.Request, lastReloadAtUtc);
+                    }
                 }
                 catch (Exception exception)
                 {
@@ -1124,6 +1306,8 @@ namespace VolxGames.UnityBridge.Editor
             public ManualResetEvent Complete { get; }
 
             public UnityBridgeCommandResponse Response { get; set; }
+
+            public bool Cancelled { get; set; }
         }
 
         private sealed class PendingMainThreadJob
@@ -1141,6 +1325,8 @@ namespace VolxGames.UnityBridge.Editor
             public object Result { get; set; }
 
             public Exception Exception { get; set; }
+
+            public bool Cancelled { get; set; }
         }
     }
 }

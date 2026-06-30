@@ -4,4 +4,4 @@ args = ["/absolute/path/to/volxgames-unity-bridge/Tools/unity-mcp-server/server.
 cwd = "/absolute/path/to/volxgames-unity-bridge"
 
 [mcp_servers.unity-bridge.env]
-UNITY_BRIDGE_URL = "http://127.0.0.1:48761"
+UNITY_BRIDGE_PROJECT_PATH = "/absolute/path/to/UnityProject"

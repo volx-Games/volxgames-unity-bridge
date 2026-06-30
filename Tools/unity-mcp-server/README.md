@@ -4,6 +4,16 @@ This server exposes 123 MCP tools backed by the reusable Unity editor bridge in 
 
 It is not Codex-specific. Any MCP client that can launch a stdio server can use this adapter, including Cursor.
 
+## Targeting a Unity Editor
+
+The adapter supports three targeting modes:
+
+- `UNITY_BRIDGE_URL=http://127.0.0.1:48761` targets an explicit bridge URL.
+- `UNITY_BRIDGE_PROJECT_PATH=/absolute/path/to/UnityProject` selects the live bridge registered for that Unity project.
+- With no env vars, the adapter auto-discovers only when exactly one live bridge is running.
+
+When multiple Unity Editors are open, prefer `UNITY_BRIDGE_PROJECT_PATH`. The adapter intentionally fails closed if multiple live bridges are discovered and no target is specified, because mutation tools must not run against the wrong Unity project.
+
 Risky mutation tools require:
 
 ```text
@@ -141,7 +151,7 @@ This is enforced for destructive or high-impact actions such as deleting or movi
 ## Usage
 
 ```bash
-UNITY_BRIDGE_URL=http://127.0.0.1:48761 node ./Tools/unity-mcp-server/server.js
+UNITY_BRIDGE_PROJECT_PATH=/absolute/path/to/UnityProject node ./Tools/unity-mcp-server/server.js
 ```
 
 The Unity package must be loaded in the editor and the bridge must be running.
@@ -159,7 +169,7 @@ Example Cursor config:
         "${workspaceFolder}/Tools/unity-mcp-server/server.js"
       ],
       "env": {
-        "UNITY_BRIDGE_URL": "http://127.0.0.1:48761"
+        "UNITY_BRIDGE_PROJECT_PATH": "/absolute/path/to/UnityProject"
       }
     }
   }
@@ -181,7 +191,7 @@ Codex uses MCP servers from `~/.codex/config.toml` or a project-scoped `.codex/c
 Quick add with the Codex CLI:
 
 ```bash
-codex mcp add unity-bridge --env UNITY_BRIDGE_URL=http://127.0.0.1:48761 -- node ./Tools/unity-mcp-server/server.js
+codex mcp add unity-bridge --env UNITY_BRIDGE_PROJECT_PATH=/absolute/path/to/UnityProject -- node ./Tools/unity-mcp-server/server.js
 ```
 
 Verify it:
@@ -205,7 +215,7 @@ args = ["/absolute/path/to/volxgames-unity-bridge/Tools/unity-mcp-server/server.
 cwd = "/absolute/path/to/volxgames-unity-bridge"
 
 [mcp_servers.unity-bridge.env]
-UNITY_BRIDGE_URL = "http://127.0.0.1:48761"
+UNITY_BRIDGE_PROJECT_PATH = "/absolute/path/to/UnityProject"
 ```
 
 An example file is checked in at `examples/codex/config.toml.example`.

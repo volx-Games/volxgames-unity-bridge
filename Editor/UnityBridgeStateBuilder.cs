@@ -14,13 +14,23 @@ namespace VolxGames.UnityBridge.Editor
 {
     internal static class UnityBridgeStateBuilder
     {
+        private static string lastAssetRefreshAtUtc;
+
+        public static string MarkAssetRefresh()
+        {
+            lastAssetRefreshAtUtc = System.DateTime.UtcNow.ToString("O");
+            return lastAssetRefreshAtUtc;
+        }
+
         public static UnityBridgeHealth BuildHealth(int port, bool running, string startedAtUtc)
         {
             return new UnityBridgeHealth
             {
                 projectName = Application.productName,
                 projectPath = Application.dataPath.Replace("/Assets", string.Empty),
+                url = $"http://127.0.0.1:{port}",
                 port = port,
+                processId = System.Diagnostics.Process.GetCurrentProcess().Id,
                 running = running,
                 unityVersion = Application.unityVersion,
                 startedAtUtc = startedAtUtc
@@ -40,6 +50,7 @@ namespace VolxGames.UnityBridge.Editor
                 isUpdating = EditorApplication.isUpdating,
                 isApplicationActive = InternalEditorUtility.isApplicationActive,
                 activeScene = SceneManager.GetActiveScene().path,
+                lastAssetRefreshAtUtc = lastAssetRefreshAtUtc,
                 lastReloadAtUtc = lastReloadAtUtc
             };
 

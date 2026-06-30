@@ -34,7 +34,7 @@ namespace VolxGames.UnityBridge.Editor
             EditorGUILayout.Space();
             EditorGUILayout.HelpBox(
                 UnityBridgeServer.IsRunning
-                    ? $"Bridge is listening on http://127.0.0.1:{UnityBridgeServer.Port}/"
+                    ? $"Bridge is listening on http://127.0.0.1:{UnityBridgeServer.BoundPort}/"
                     : "Bridge is stopped.",
                 MessageType.Info);
 

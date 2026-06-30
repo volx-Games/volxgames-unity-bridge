@@ -178,10 +178,11 @@ namespace VolxGames.UnityBridge.Editor
                     case "resolve_packages":
                         return UnityBridgeMutations.ResolvePackages(lastReloadAtUtc);
                     case "refresh_assets":
+                        var refreshedAtUtc = UnityBridgeStateBuilder.MarkAssetRefresh();
                         AssetDatabase.Refresh();
                         return Ok(EditorApplication.isCompiling
-                            ? "Refreshed AssetDatabase. Compilation is still running; call compilation_status until running=false before trusting logs."
-                            : "Refreshed AssetDatabase. No compilation is currently running.",
+                            ? $"Refreshed AssetDatabase at {refreshedAtUtc}. Compilation is still running; call compilation_status until running=false before trusting logs."
+                            : $"Refreshed AssetDatabase at {refreshedAtUtc}. No compilation is currently running; lastReloadAtUtc only changes when Unity performs an assembly reload.",
                             lastReloadAtUtc);
                     case "compilation_status":
                         return Ok(UnityBridgeJson.SerializeObject(UnityBridgeCompilationTracker.GetCurrentOrLastReport()), lastReloadAtUtc);
